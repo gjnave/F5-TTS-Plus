@@ -1,4 +1,8 @@
 import re
+import os
+import subprocess
+import yt_dlp
+from pathlib import Path
 import torch
 import torchaudio
 import gradio as gr
@@ -443,6 +447,191 @@ with gr.Blocks() as app_tts:
         ],
         outputs=[audio_output, spectrogram_output],
     )
+
+
+def timestamp_to_seconds(timestamp):
+    """Convert timestamp string to seconds"""
+    if not timestamp:
+        return 0
+        
+    patterns = [
+        r'(?:(?P<hours>\d+):)?(?P<minutes>\d+):(?P<seconds>\d+)',  # HH:MM:SS or MM:SS
+        r'(?P<seconds>\d+)'  # Just seconds
+    ]
+    
+    for pattern in patterns:
+        match = re.match(pattern, timestamp.strip())
+        if match:
+            parts = match.groupdict(default='0')
+            hours = int(parts.get('hours', 0))
+            minutes = int(parts.get('minutes', 0))
+            seconds = int(parts.get('seconds', 0))
+            return hours * 3600 + minutes * 60 + seconds
+            
+    raise ValueError(f"Invalid timestamp format: {timestamp}")
+
+def download_youtube_audio(url, progress=None):
+    clips_dir = Path("clips")
+    clips_dir.mkdir(exist_ok=True)
+    
+    try:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'outtmpl': str(clips_dir / 'audio'),  # Remove .mp3 extension here
+            'quiet': False,
+            'no_warnings': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            final_path = str(clips_dir / 'audio.mp3')
+            return final_path, None, info.get('title', 'Unknown Title')
+            
+    except Exception as e:
+        return None, str(e), None
+
+def trim_audio(input_file, start_time, end_time):
+    """Trim audio file using FFmpeg"""
+    try:
+        # Always use our known audio file
+        input_file = str(Path("clips") / "audio.mp3")
+        output_file = str(Path("clips") / "trimmed.mp3")
+        
+        # Convert timestamps to seconds
+        start_seconds = timestamp_to_seconds(start_time) if start_time else 0
+        if end_time:
+            end_seconds = timestamp_to_seconds(end_time)
+            duration = end_seconds - start_seconds
+            cmd = ['ffmpeg', '-i', input_file, '-ss', str(start_seconds), '-t', str(duration), '-acodec', 'copy', output_file, '-y']
+        else:
+            cmd = ['ffmpeg', '-i', input_file, '-ss', str(start_seconds), '-acodec', 'copy', output_file, '-y']
+            
+        print(f"Running FFmpeg command: {' '.join(cmd)}")
+        process = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if process.returncode != 0:
+            return None, f"FFmpeg error: {process.stderr}"
+            
+        return output_file, None
+        
+    except Exception as e:
+        return None, f"Error: {str(e)}"
+
+def on_trim_click(audio_file, start_time, end_time):
+    if not audio_file:
+        return {
+            trim_status: "Please download an audio file first",
+            trim_preview_row: gr.update(visible=False),
+            trimmed_audio_preview: None
+        }
+    
+    output_file, error = trim_audio(audio_file, start_time, end_time)
+    
+    if error:
+        return {
+            trim_status: f"Error: {error}",
+            trim_preview_row: gr.update(visible=False),
+            trimmed_audio_preview: None
+        }
+    else:
+        return {
+            trim_status: f"Successfully trimmed to: {output_file}",
+            trim_preview_row: gr.update(visible=True),
+            trimmed_audio_preview: output_file
+        }
+
+# Add this before the final app definition
+with gr.Blocks() as app_youtube:
+    gr.Markdown("""
+    # YouTube Audio Downloader and Trimmer
+    
+    ## Step 1: Download YouTube Audio
+    Enter a YouTube URL to download the audio in MP3 format.
+    """)
+    
+    with gr.Row():
+        url_input = gr.Textbox(
+            label="YouTube URL", 
+            placeholder="https://www.youtube.com/watch?v=..."
+        )
+    
+    download_btn = gr.Button("Download Audio", variant="primary")
+    status_output = gr.Textbox(label="Status", interactive=False)
+    
+    # Preview section
+    with gr.Row(visible=False) as preview_row:
+        audio_preview = gr.Audio(label="Preview")
+        title_display = gr.Textbox(label="Video Title", interactive=False)
+    
+    # Trim section
+    gr.Markdown("""
+    ## Step 2: Trim Audio (Optional)
+    After downloading, you can trim the audio to specific timestamps.
+    
+    Timestamp formats: HH:MM:SS, MM:SS, or seconds
+    Example: 1:30 or 01:30 or 90 (all mean 1 minute 30 seconds)
+    """)
+    
+    with gr.Row():
+        trim_start = gr.Textbox(
+            label="Start Time", 
+            placeholder="0:00"
+        )
+        trim_end = gr.Textbox(
+            label="End Time", 
+            placeholder="1:30"
+        )
+    
+    trim_btn = gr.Button("Trim Audio", variant="secondary")
+    trim_status = gr.Textbox(label="Trim Status", interactive=False)
+    
+    with gr.Row(visible=False) as trim_preview_row:
+        trimmed_audio_preview = gr.Audio(label="Trimmed Audio Preview")
+    
+    def on_download_click(url):
+        if not url:
+            return {
+                status_output: "Please enter a URL",
+                preview_row: gr.update(visible=False),
+                audio_preview: None,
+                title_display: ""
+            }
+        
+        filepath, error, title = download_youtube_audio(url)
+        
+        if error:
+            return {
+                status_output: f"Error: {error}",
+                preview_row: gr.update(visible=False),
+                audio_preview: None,
+                title_display: ""
+            }
+        else:
+            return {
+                status_output: f"Successfully downloaded to: {filepath}",
+                preview_row: gr.update(visible=True),
+                audio_preview: filepath,
+                title_display: title
+            }
+    
+    
+    download_btn.click(
+        on_download_click,
+        inputs=[url_input],
+        outputs=[status_output, preview_row, audio_preview, title_display]
+    )
+    
+    trim_btn.click(
+        on_trim_click,
+        inputs=[audio_preview, trim_start, trim_end],
+        outputs=[trim_status, trim_preview_row, trimmed_audio_preview]
+    )
+
     
 with gr.Blocks() as app_podcast:
     gr.Markdown("# Podcast Generation")
@@ -766,7 +955,7 @@ If you're having issues, try converting your reference audio to WAV or MP3, clip
 **NOTE: Reference text will be automatically transcribed with Whisper if not provided. For best results, keep your reference clips short (<15s). Ensure the audio is fully uploaded before generating.**
 """
     )
-    gr.TabbedInterface([app_tts, app_podcast, app_emotional, app_credits], ["TTS", "Podcast", "Multi-Style", "Credits"])
+    gr.TabbedInterface([app_tts, app_podcast, app_emotional, app_youtube, app_credits], ["TTS", "Podcast", "Multi-Style", "YouTube", "Credits"])
 
 @click.command()
 @click.option("--port", "-p", default=None, type=int, help="Port to run the app on")
