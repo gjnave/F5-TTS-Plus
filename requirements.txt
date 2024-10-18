@@ -1,3 +1,4 @@
+yt_dlp
 accelerate>=0.33.0
 cached_path
 click
