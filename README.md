@@ -1,5 +1,5 @@
 ****
-ADDED: A Youtube Downloader and Clip Cutter
+ADDED: A Youtube Downloader and Clip Cutter and transcript generator
 *****
 
 # F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching
