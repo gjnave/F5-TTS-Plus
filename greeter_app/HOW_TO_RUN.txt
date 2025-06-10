@@ -1,0 +1,49 @@
+How to Run the Greeter Web Application
+
+This application is a standard Java Servlet web application. To run it, you need a Java web server/servlet container that supports the Jakarta Servlet API (e.g., Apache Tomcat, Jetty).
+
+Prerequisites:
+1. Java Development Kit (JDK) installed (version 11 or later recommended).
+2. A Java web server (e.g., Apache Tomcat 10.x or Jetty 11.x) downloaded and installed.
+
+Steps to Compile and Run:
+
+1. Compilation:
+   - You'll need the Jakarta Servlet API JAR. This usually comes with your web server (e.g., in Tomcat's `lib` directory, it's typically `servlet-api.jar` or a similar name like `jakarta.servlet-api-X.Y.Z.jar`).
+   - Open a terminal or command prompt.
+   - Navigate to the `greeter_app/src/main/java` directory.
+   - Compile the servlet:
+     ```bash
+     javac -cp path/to/your/servlet-api.jar:. com/example/greeter/GreeterServlet.java -d ../webapp/WEB-INF/classes
+     ```
+     Replace `path/to/your/servlet-api.jar` with the actual path to your servlet API JAR.
+     This command compiles the .java file and places the .class file into the `greeter_app/src/main/webapp/WEB-INF/classes` directory.
+
+2. Create a WAR file (Web Application Archive) - Optional but Recommended for Deployment:
+   - Navigate to the `greeter_app/src/main/webapp` directory.
+   - Create a WAR file named `greeter.war` (for example) containing everything in this `webapp` directory.
+     ```bash
+     jar -cvf ../../../greeter.war .
+     ```
+     This will create `greeter.war` in the `greeter_app` root directory.
+
+3. Deployment:
+   - Apache Tomcat:
+     - Copy the `greeter.war` file to Tomcat's `webapps` directory.
+     - Alternatively, if you haven't created a WAR file, you can deploy it as an "exploded" directory:
+       - Copy the entire `greeter_app/src/main/webapp` directory to Tomcat's `webapps` directory and rename it to `greeter` (or your desired context path). Ensure the compiled classes are in `greeter/WEB-INF/classes`.
+   - Jetty:
+     - Copy the `greeter.war` file to Jetty's `webapps` directory.
+     - Similar exploded deployment options are available for Jetty.
+
+4. Start your Web Server:
+   - Run the startup script for your web server (e.g., `startup.sh` or `catalina.sh run` for Tomcat, `java -jar start.jar` for Jetty).
+
+5. Access the Application:
+   - Open a web browser.
+   - Navigate to: `http://localhost:8080/greeter/` (if you named your WAR/directory `greeter` and your server is running on port 8080).
+   - You should see the input form. If you submit a name, the servlet will greet you. The servlet is mapped to `/greet`, so the form submission will go to `http://localhost:8080/greeter/greet`.
+
+Notes:
+- The exact path to the servlet API jar and deployment steps might vary slightly depending on your web server version and configuration.
+- For more complex projects, build tools like Apache Maven or Gradle are highly recommended. They automate the compilation, dependency management, and packaging process.
